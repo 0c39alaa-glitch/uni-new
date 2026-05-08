@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظام دعم طلاب الجامعة</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f0f4f8; }
+    .navbar { background: #1a56db; color: white; padding: 15px 30px; font-size: 20px; font-weight: bold; }
+    .container { max-width: 800px; margin: 30px auto; padding: 0 20px; }
+    .card { background: white; border-radius: 10px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h2 { color: #1a56db; margin-bottom: 20px; }
+    input, textarea, select { width: 100%; padding: 10px; margin: 8px 0 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; }
+    button { background: #1a56db; color: white; padding: 12px 25px; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; width: 100%; }
+    button:hover { background: #1648c0; }
+    .msg { padding: 10px; border-radius: 6px; margin-top: 10px; text-align: center; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .ticket { background: #f8f9fa; border-right: 4px solid #1a56db; padding: 15px; margin: 10px 0; border-radius: 6px; }
+    .status-open { color: #856404; background: #fff3cd; padding: 3px 10px; border-radius: 10px; font-size: 13px; }
+    .status-in_progress { color: #004085; background: #cce5ff; padding: 3px 10px; border-radius: 10px; font-size: 13px; }
+    .status-closed { color: #155724; background: #d4edda; padding: 3px 10px; border-radius: 10px; font-size: 13px; }
+    .hidden { display: none; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+    .tab { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; background: #e2e8f0; font-size: 15px; }
+    .tab.active { background: #1a56db; color: white; }
+  </style>
+</head>
+<body>
+
+<div class="navbar">🎓 نظام دعم طلاب الجامعة</div>
+
+<div class="container">
+
+  <!-- Login/Register -->
+  <div id="authSection">
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('login')">تسجيل الدخول</button>
+      <button class="tab" onclick="showTab('register')">حساب جديد</button>
+    </div>
+
+    <!-- Login -->
+    <div id="loginTab" class="card">
+      <h2>تسجيل الدخول</h2>
+      <input type="email" id="loginEmail" placeholder="الإيميل" />
+      <input type="password" id="loginPassword" placeholder="كلمة المرور" />
+      <button onclick="login()">دخول</button>
+      <div id="loginMsg"></div>
+    </div>
+
+    <!-- Register -->
+    <div id="registerTab" class="card hidden">
+      <h2>إنشاء حساب</h2>
+      <input type="text" id="regName" placeholder="الاسم" />
+      <input type="email" id="regEmail" placeholder="الإيميل" />
+      <input type="password" id="regPassword" placeholder="كلمة المرور" />
+      <button onclick="register()">إنشاء حساب</button>
+      <div id="registerMsg"></div>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="dashboard" class="hidden">
+    <div class="card">
+      <h2 id="welcomeMsg"></h2>
+      <button onclick="logout()" style="background:#e53e3e; width:auto; padding: 8px 20px;">خروج</button>
+    </div>
+
+    <!-- New Ticket -->
+    <div class="card">
+      <h2>إرسال طلب جديد</h2>
+      <input type="text" id="ticketTitle" placeholder="عنوان المشكلة" />
+      <textarea id="ticketDesc" rows="3" placeholder="وصف المشكلة"></textarea>
+      <select id="ticketType">
+        <option value="registration">مشكلة تسجيل</option>
+        <option value="course">مشكلة مادة</option>
+        <option value="account">مشكلة حساب</option>
+        <option value="schedule">مشكلة جدول</option>
+        <option value="mental_health">مشكلة نفسية</option>
+        <option value="medical">مشكلة صحية</option>
+        <option value="student_affairs">شؤون طلابية</option>
+      </select>
+      <button onclick="createTicket()">إرسال الطلب</button>
+      <div id="ticketMsg"></div>
+    </div>
+
+    <!-- My Tickets -->
+    <div class="card">
+      <h2>طلباتي</h2>
+      <button onclick="loadTickets()" style="margin-bottom:15px;">تحديث</button>
+      <div id="ticketsList"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let token = localStorage.getItem('token');
+  let user = JSON.parse(localStorage.getItem('user') || 'null');
+
+  if (token) showDashboard();
+
+  function showTab(tab) {
+    document.getElementById('loginTab').classList.toggle('hidden', tab !== 'login');
+    document.getElementById('registerTab').classList.toggle('hidden', tab !== 'register');
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      t.classList.toggle('active', (tab === 'login' && i === 0) || (tab === 'register' && i === 1));
+    });
+  }
+
+  async function register() {
+    const name = document.getElementById('regName').value;
+    const email = document.getElementById('regEmail').value;
+    const password = document.getElementById('regPassword').value;
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password, role: 'student' })
+    });
+    const data = await res.json();
+    const msg = document.getElementById('registerMsg');
+    if (res.ok) {
+      msg.className = 'msg success';
+      msg.textContent = 'تم إنشاء الحساب! سجل دخولك الآن';
+      showTab('login');
+    } else {
+      msg.className = 'msg error';
+      msg.textContent = data.message;
+    }
+  }
+
+  async function login() {
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+   if (res.ok) {
+      token = data.token;
+      user = data.user;
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      if (data.user.role === 'admin') {
+        window.location.href = '/admin.html';
+      } else {
+        showDashboard();
+      }
+    } else {
+      const msg = document.getElementById('loginMsg');
+      msg.className = 'msg error';
+      msg.textContent = data.message;
+    }
+  }
+
+  function showDashboard() {
+    document.getElementById('authSection').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+    document.getElementById('welcomeMsg').textContent = `مرحباً ${user.name} 👋`;
+    loadTickets();
+  }
+
+  function logout() {
+    localStorage.clear();
+    location.reload();
+  }
+
+  async function createTicket() {
+    const title = document.getElementById('ticketTitle').value;
+    const description = document.getElementById('ticketDesc').value;
+    const type = document.getElementById('ticketType').value;
+    const res = await fetch('/api/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ title, description, type })
+    });
+    const data = await res.json();
+    const msg = document.getElementById('ticketMsg');
+    if (res.ok) {
+      msg.className = 'msg success';
+      msg.textContent = 'تم إرسال الطلب بنجاح!';
+      loadTickets();
+    } else {
+      msg.className = 'msg error';
+      msg.textContent = data.message;
+    }
+  }
+
+  async function loadTickets() {
+    const res = await fetch('/api/tickets/my', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const tickets = await res.json();
+    const list = document.getElementById('ticketsList');
+    if (tickets.length === 0) {
+      list.innerHTML = '<p style="color:#888">لا يوجد طلبات بعد</p>';
+      return;
+    }
+    list.innerHTML = tickets.map(t => `
+      <div class="ticket">
+        <strong>${t.title}</strong>
+        <span class="status-${t.status}" style="float:left">${t.status}</span>
+        <p style="color:#666; margin-top:5px">${t.description}</p>
+        ${t.Replies?.length > 0 ? `
+          <div style="margin-top:10px; padding:10px; background:#e8f4fd; border-radius:6px;">
+            <strong>ردود الإدارة:</strong>
+            ${t.Replies.map(r => `<p style="margin-top:5px;">↩ ${r.message}</p>`).join('')}
+          </div>
+        ` : '<p style="color:#aaa; font-size:13px; margin-top:5px;">لا يوجد رد بعد</p>'}
+      </div>
+    `).join('');
+  }
+</script>
+
+</body>
+</html>

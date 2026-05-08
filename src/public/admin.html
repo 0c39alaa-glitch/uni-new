@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة تحكم الأدمن</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f0f4f8; }
+    .navbar { background: #1a56db; color: white; padding: 15px 30px; font-size: 20px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    .container { max-width: 900px; margin: 30px auto; padding: 0 20px; }
+    .card { background: white; border-radius: 10px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h2 { color: #1a56db; margin-bottom: 20px; }
+    input, textarea, select { width: 100%; padding: 10px; margin: 8px 0 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; }
+    button { background: #1a56db; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    button:hover { background: #1648c0; }
+    .btn-red { background: #e53e3e; }
+    .ticket { background: #f8f9fa; border-right: 4px solid #1a56db; padding: 15px; margin: 10px 0; border-radius: 6px; }
+    .ticket h3 { margin-bottom: 8px; }
+    .ticket p { color: #666; margin-bottom: 8px; }
+    .ticket-footer { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .status { padding: 3px 10px; border-radius: 10px; font-size: 13px; }
+    .status-open { color: #856404; background: #fff3cd; }
+    .status-in_progress { color: #004085; background: #cce5ff; }
+    .status-closed { color: #155724; background: #d4edda; }
+    .reply-box { margin-top: 10px; display: flex; gap: 10px; }
+    .reply-box input { margin: 0; }
+    .replies { margin-top: 10px; padding: 10px; background: #e8f4fd; border-radius: 6px; }
+    .reply-item { padding: 5px 0; border-bottom: 1px solid #ddd; font-size: 14px; }
+    .hidden { display: none; }
+    .msg { padding: 10px; border-radius: 6px; margin-top: 10px; text-align: center; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .badge { background: #e53e3e; color: white; border-radius: 50%; padding: 2px 7px; font-size: 12px; margin-right: 5px; }
+  </style>
+</head>
+<body>
+
+<div class="navbar">
+  🎓 لوحة تحكم الأدمن
+  <button class="btn-red" onclick="logout()">خروج</button>
+</div>
+
+<div class="container">
+
+  <!-- Login -->
+  <div id="loginSection">
+    <div class="card">
+      <h2>دخول الأدمن</h2>
+      <input type="email" id="email" placeholder="الإيميل" />
+      <input type="password" id="password" placeholder="كلمة المرور" />
+      <button onclick="login()">دخول</button>
+      <div id="loginMsg"></div>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="dashboard" class="hidden">
+    <div class="card">
+      <h2>كل الطلبات <span id="ticketCount" class="badge">0</span></h2>
+      <button onclick="loadTickets()">🔄 تحديث</button>
+    </div>
+    <div id="ticketsList"></div>
+  </div>
+
+</div>
+
+<script>
+  let token = localStorage.getItem('adminToken');
+  if (token) showDashboard();
+
+  async function login() {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (res.ok && data.user.role === 'admin') {
+      token = data.token;
+      localStorage.setItem('adminToken', token);
+      showDashboard();
+    } else {
+      const msg = document.getElementById('loginMsg');
+      msg.className = 'msg error';
+      msg.textContent = 'خطأ في الدخول أو ليس أدمن';
+    }
+  }
+
+  function showDashboard() {
+    document.getElementById('loginSection').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+    loadTickets();
+  }
+
+  function logout() {
+    localStorage.removeItem('adminToken');
+    location.reload();
+  }
+
+  async function loadTickets() {
+    const res = await fetch('/api/tickets', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const tickets = await res.json();
+    document.getElementById('ticketCount').textContent = tickets.length;
+
+    const list = document.getElementById('ticketsList');
+    if (tickets.length === 0) {
+      list.innerHTML = '<div class="card"><p>لا يوجد طلبات</p></div>';
+      return;
+    }
+
+    list.innerHTML = tickets.map(t => `
+      <div class="card ticket">
+        <h3>${t.title}</h3>
+        <p>${t.description}</p>
+        <p style="font-size:13px; color:#888">الطالب: ${t.User?.name} | النوع: ${t.type}</p>
+        
+        ${t.Replies?.length > 0 ? `
+          <div class="replies">
+            <strong>الردود:</strong>
+            ${t.Replies.map(r => `<div class="reply-item">↩ ${r.message}</div>`).join('')}
+          </div>
+        ` : ''}
+
+        <div class="ticket-footer">
+          <span class="status status-${t.status}">${t.status}</span>
+          <select onchange="changeStatus(${t.id}, this.value)">
+            <option value="open" ${t.status==='open'?'selected':''}>Open</option>
+            <option value="in_progress" ${t.status==='in_progress'?'selected':''}>In Progress</option>
+            <option value="closed" ${t.status==='closed'?'selected':''}>Closed</option>
+          </select>
+        </div>
+
+        <div class="reply-box">
+          <input type="text" id="reply-${t.id}" placeholder="اكتب ردك هنا..." />
+          <button onclick="sendReply(${t.id})">إرسال الرد</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function changeStatus(id, status) {
+    await fetch(`/api/tickets/${id}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ status })
+    });
+    loadTickets();
+  }
+
+  async function sendReply(id) {
+    const message = document.getElementById(`reply-${id}`).value;
+    if (!message) return;
+    const res = await fetch(`/api/tickets/${id}/reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ message })
+    });
+    if (res.ok) loadTickets();
+  }
+</script>
+
+</body>
+</html>
