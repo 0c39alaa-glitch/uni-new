@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: university_support
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+    ports:
+      - "5432:5432"
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      JWT_SECRET: mysecretkey123
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: university_support
+      DB_USER: postgres
+      DB_PASSWORD: 123456
+    depends_on:
+      - db
