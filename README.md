@@ -52,7 +52,7 @@ DB_PASSWORD=123456
 ```bash
 node src/index.js
 ```
-
+                    docker-compose up --build
 5. Open browser
 ```
 http://localhost:3000
@@ -72,11 +72,15 @@ http://localhost:3000
 | PUT | /api/tickets/:id/status | Update status (Admin) |
 | POST | /api/tickets/:id/reply | Reply to ticket (Admin) |
 
-## 🐳 Docker
+## 🐳 Docker Compose
 
 ```bash
-docker build -t university-support .
-docker run -p 3000:3000 university-support
+docker-compose up --build
+```
+
+ثم افتح:
+```
+http://localhost:3000
 ```
 
 ## 👥 Default Users
@@ -85,3 +89,12 @@ docker run -p 3000:3000 university-support
 |------|-------|----------|
 | Admin | admin@university.com | admin123 |
 | Student | sara@university.com | 123456 |
+
+
+
+data base
+
+docker exec -it semple-uni-db-1 psql -U postgres -d university_support
+
+SELECT * FROM users;
+SELECT * FROM tickets;
