@@ -33,14 +33,12 @@
 
 <div class="container">
 
-  <!-- Login/Register -->
   <div id="authSection">
     <div class="tabs">
       <button class="tab active" onclick="showTab('login')">تسجيل الدخول</button>
       <button class="tab" onclick="showTab('register')">حساب جديد</button>
     </div>
 
-    <!-- Login -->
     <div id="loginTab" class="card">
       <h2>تسجيل الدخول</h2>
       <input type="email" id="loginEmail" placeholder="الإيميل" />
@@ -49,7 +47,6 @@
       <div id="loginMsg"></div>
     </div>
 
-    <!-- Register -->
     <div id="registerTab" class="card hidden">
       <h2>إنشاء حساب</h2>
       <input type="text" id="regName" placeholder="الاسم" />
@@ -60,14 +57,12 @@
     </div>
   </div>
 
-  <!-- Dashboard -->
   <div id="dashboard" class="hidden">
     <div class="card">
       <h2 id="welcomeMsg"></h2>
       <button onclick="logout()" style="background:#e53e3e; width:auto; padding: 8px 20px;">خروج</button>
     </div>
 
-    <!-- New Ticket -->
     <div class="card">
       <h2>إرسال طلب جديد</h2>
       <input type="text" id="ticketTitle" placeholder="عنوان المشكلة" />
@@ -85,10 +80,9 @@
       <div id="ticketMsg"></div>
     </div>
 
-    <!-- My Tickets -->
     <div class="card">
       <h2>طلباتي</h2>
-      <button onclick="loadTickets()" style="margin-bottom:15px;">تحديث</button>
+      <button onclick="loadTickets()" style="margin-bottom:15px; width:auto;">تحديث</button>
       <div id="ticketsList"></div>
     </div>
   </div>
@@ -99,7 +93,14 @@
   let token = localStorage.getItem('token');
   let user = JSON.parse(localStorage.getItem('user') || 'null');
 
-  if (token) showDashboard();
+  // فحص حماية التوجيه عند بداية فتح الصفحة لمنع تداخل الجلسات
+  if (token && user) {
+    if (user.role === 'admin') {
+      window.location.href = '/admin.html';
+    } else {
+      showDashboard();
+    }
+  }
 
   function showTab(tab) {
     document.getElementById('loginTab').classList.toggle('hidden', tab !== 'login');
@@ -139,13 +140,15 @@
       body: JSON.stringify({ email, password })
     });
     const data = await res.json();
-   if (res.ok) {
+    if (res.ok) {
       token = data.token;
       user = data.user;
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
-      if (data.user.role === 'admin') {
-        window.location.href = '/admin.html';
+      
+      // التوجيه الصحيح بالاعتماد على رد السيرفر الصارم
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
       } else {
         showDashboard();
       }
@@ -182,6 +185,8 @@
     if (res.ok) {
       msg.className = 'msg success';
       msg.textContent = 'تم إرسال الطلب بنجاح!';
+      document.getElementById('ticketTitle').value = '';
+      document.getElementById('ticketDesc').value = '';
       loadTickets();
     } else {
       msg.className = 'msg error';

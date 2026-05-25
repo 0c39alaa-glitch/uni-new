@@ -28,9 +28,6 @@
     .replies { margin-top: 10px; padding: 10px; background: #e8f4fd; border-radius: 6px; }
     .reply-item { padding: 5px 0; border-bottom: 1px solid #ddd; font-size: 14px; }
     .hidden { display: none; }
-    .msg { padding: 10px; border-radius: 6px; margin-top: 10px; text-align: center; }
-    .success { background: #d4edda; color: #155724; }
-    .error { background: #f8d7da; color: #721c24; }
     .badge { background: #e53e3e; color: white; border-radius: 50%; padding: 2px 7px; font-size: 12px; margin-right: 5px; }
   </style>
 </head>
@@ -43,19 +40,7 @@
 
 <div class="container">
 
-  <!-- Login -->
-  <div id="loginSection">
-    <div class="card">
-      <h2>دخول الأدمن</h2>
-      <input type="email" id="email" placeholder="الإيميل" />
-      <input type="password" id="password" placeholder="كلمة المرور" />
-      <button onclick="login()">دخول</button>
-      <div id="loginMsg"></div>
-    </div>
-  </div>
-
-  <!-- Dashboard -->
-  <div id="dashboard" class="hidden">
+  <div id="dashboard">
     <div class="card">
       <h2>كل الطلبات <span id="ticketCount" class="badge">0</span></h2>
       <button onclick="loadTickets()">🔄 تحديث</button>
@@ -66,38 +51,22 @@
 </div>
 
 <script>
-  let token = localStorage.getItem('adminToken');
-  if (token) showDashboard();
+  // توحيد استخدام مفتاح token الموحد بالمشروع لقراءة تفاصيل الأدمن
+  let token = localStorage.getItem('token');
+  let user = JSON.parse(localStorage.getItem('user') || 'null');
 
-  async function login() {
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await res.json();
-    if (res.ok && data.user.role === 'admin') {
-      token = data.token;
-      localStorage.setItem('adminToken', token);
-      showDashboard();
-    } else {
-      const msg = document.getElementById('loginMsg');
-      msg.className = 'msg error';
-      msg.textContent = 'خطأ في الدخول أو ليس أدمن';
-    }
-  }
-
-  function showDashboard() {
-    document.getElementById('loginSection').classList.add('hidden');
-    document.getElementById('dashboard').classList.remove('hidden');
+  // جدار حماية الواجهة: إذا حاول أي مستخدم غير الأدمن الدخول يتم طرده فوراً لصفحة الترحيب
+  if (!token || !user || user.role !== 'admin') {
+    alert('غير مسموح بالدخول، يرجى تسجيل الدخول أولاً كمسؤول.');
+    localStorage.clear();
+    window.location.href = '/';
+  } else {
     loadTickets();
   }
 
   function logout() {
-    localStorage.removeItem('adminToken');
-    location.reload();
+    localStorage.clear();
+    window.location.href = '/';
   }
 
   async function loadTickets() {
@@ -160,7 +129,10 @@
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ message })
     });
-    if (res.ok) loadTickets();
+    if (res.ok) {
+      document.getElementById(`reply-${id}`).value = '';
+      loadTickets();
+    }
   }
 </script>
 

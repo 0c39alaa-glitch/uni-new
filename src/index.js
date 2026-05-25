@@ -7,7 +7,9 @@ require('dotenv').config();
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+
+// إعداد مجلد الملفات الثابتة مع إيقاف الفهرسة التلقائية لمنع فتح صفحة الأدمن تلقائياً
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // =====================
 // الاتصال بقاعدة البيانات
@@ -56,7 +58,7 @@ const createTables = async () => {
 
   console.log('Tables ready!');
 
-  // إضافة المستخدمين الافتراضيين إذا ما كانوا موجودين
+  // إضافة المستخدمين الافتراضيين
   const adminExists = await db.query('SELECT id FROM users WHERE email = $1', ['admin@university.com']);
   if (adminExists.rows.length === 0) {
     const adminPass = await bcrypt.hash('admin123', 10);
@@ -99,53 +101,56 @@ const isAdmin = (req, res, next) => {
 };
 
 // =====================
+// Base Route (إصلاح خطأ ENOENT وتوجيه المشروع للملف الصحيح)
+// =====================
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// =====================
 // Auth Routes
 // =====================
 
-// تسجيل مستخدم جديد
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
-
-    // تحقق إن الإيميل مش مكرر
     const existing = await db.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) return res.status(400).json({ message: 'Email already exists' });
 
-    // تشفير كلمة المرور
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    // إضافة المستخدم
     const result = await db.query(
       'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
       [name, email, hashedPassword, role || 'student']
     );
-
-    res.status(201).json({ message: 'User registered successfully', user: result.rows[0] });
+    return res.status(201).json({ message: 'User registered successfully', user: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 });
 
-// تسجيل الدخول
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    // جيب المستخدم
     const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
     const user = result.rows[0];
     if (!user) return res.status(400).json({ message: 'Invalid email or password' });
 
-    // تحقق من كلمة المرور
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: 'Invalid email or password' });
 
-    // إنشاء التوكن
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    
+    // إرسال رابط التوجيه الصحيح بناءً على رتبة المستخدم
+    const redirectUrl = user.role === 'admin' ? '/admin.html' : '';
 
-    res.json({ message: 'Login successful', token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    return res.json({ 
+      message: 'Login successful', 
+      token, 
+      redirectUrl,
+      user: { id: user.id, name: user.name, email: user.email, role: user.role } 
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 });
 
@@ -153,43 +158,32 @@ app.post('/api/auth/login', async (req, res) => {
 // Ticket Routes
 // =====================
 
-// الطالب ينشئ طلب جديد
 app.post('/api/tickets', authenticate, async (req, res) => {
   try {
     const { title, description, type } = req.body;
-
     const result = await db.query(
       'INSERT INTO tickets (title, description, type, user_id) VALUES ($1, $2, $3, $4) RETURNING *',
       [title, description, type, req.user.id]
     );
-
-    res.status(201).json({ message: 'Ticket created successfully', ticket: result.rows[0] });
+    return res.status(201).json({ message: 'Ticket created successfully', ticket: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 });
 
-// الطالب يشوف طلباته
 app.get('/api/tickets/my', authenticate, async (req, res) => {
   try {
-    const tickets = await db.query(
-      'SELECT * FROM tickets WHERE user_id = $1 ORDER BY created_at DESC',
-      [req.user.id]
-    );
-
-    // جيب الردود لكل طلب
+    const tickets = await db.query('SELECT * FROM tickets WHERE user_id = $1 ORDER BY created_at DESC', [req.user.id]);
     for (let ticket of tickets.rows) {
       const replies = await db.query('SELECT * FROM replies WHERE ticket_id = $1', [ticket.id]);
       ticket.Replies = replies.rows;
     }
-
-    res.json(tickets.rows);
+    return res.json(tickets.rows);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 });
 
-// الأدمن يشوف كل الطلبات
 app.get('/api/tickets', authenticate, isAdmin, async (req, res) => {
   try {
     const tickets = await db.query(`
@@ -198,43 +192,31 @@ app.get('/api/tickets', authenticate, isAdmin, async (req, res) => {
       JOIN users ON tickets.user_id = users.id
       ORDER BY tickets.created_at DESC
     `);
-
-    // جيب الردود لكل طلب
     for (let ticket of tickets.rows) {
       const replies = await db.query('SELECT * FROM replies WHERE ticket_id = $1', [ticket.id]);
       ticket.Replies = replies.rows;
       ticket.User = { name: ticket.userName, email: ticket.userEmail };
     }
-
-    res.json(tickets.rows);
+    return res.json(tickets.rows);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 });
 
-// الأدمن يغير حالة الطلب
 app.put('/api/tickets/:id/status', authenticate, isAdmin, async (req, res) => {
   try {
     const { status } = req.body;
-
-    const result = await db.query(
-      'UPDATE tickets SET status = $1 WHERE id = $2 RETURNING *',
-      [status, req.params.id]
-    );
-
+    const result = await db.query('UPDATE tickets SET status = $1 WHERE id = $2 RETURNING *', [status, req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ message: 'Ticket not found' });
-
-    res.json({ message: 'Status updated', ticket: result.rows[0] });
+    return res.json({ message: 'Status updated', ticket: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 });
 
-// الأدمن يرد على طلب
 app.post('/api/tickets/:id/reply', authenticate, isAdmin, async (req, res) => {
   try {
     const { message } = req.body;
-
     const ticket = await db.query('SELECT id FROM tickets WHERE id = $1', [req.params.id]);
     if (ticket.rows.length === 0) return res.status(404).json({ message: 'Ticket not found' });
 
@@ -242,21 +224,15 @@ app.post('/api/tickets/:id/reply', authenticate, isAdmin, async (req, res) => {
       'INSERT INTO replies (message, ticket_id, user_id) VALUES ($1, $2, $3) RETURNING *',
       [message, req.params.id, req.user.id]
     );
-
-    res.status(201).json({ message: 'Reply added', reply: result.rows[0] });
+    return res.status(201).json({ message: 'Reply added', reply: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 });
 
-// =====================
-// تشغيل السيرفر
-// =====================
 const PORT = process.env.PORT || 3000;
-
 const start = async () => {
   await createTables();
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 };
-
 start();
